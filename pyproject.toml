@@ -1,0 +1,27 @@
+[project]
+name = "boto-ext-qbusiness-chat-stream"
+version = "0.0.1"
+authors = [
+    { name="Jeff Registre" },
+]
+description = "An extension of boto3 qbusiness client that adds chat streaming using the rust SDK with pyo3."
+readme = "README.md"
+requires-python = ">=3.8"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: OS Independent",
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Topic :: Software Development :: Libraries",
+]
+dependencies = [
+    "boto3"
+]
+
+[tool.setuptools]
+license-files = ["LICENSE.md"]
+
+[project.urls]
+Homepage = "https://github.com/jregistr/boto-ext-qbusiness-chat-stream"
+Issues = "https://github.com/jregistr/boto-ext-qbusiness-chat-stream/issues"
