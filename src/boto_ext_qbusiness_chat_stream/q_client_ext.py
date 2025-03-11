@@ -9,4 +9,5 @@ class ThatThing:
         print(f"world {self.q}")
 
     def doit(self):
-        return say_hello()
+        a = say_hello()
+        return a
