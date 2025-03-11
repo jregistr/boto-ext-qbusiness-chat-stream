@@ -20,23 +20,15 @@ dependencies = [
     "boto3"
 ]
 
-#[build-system]
-#requires = ["hatchling"]
-#build-backend = "hatchling.build"
-#
-#[tool.hatch.envs.default]
-#dependencies = [
-#    "maturin",  # Only needed for development
-#    "hatch"
-#]
-
 [build-system]
-requires = ["maturin"]
-build-backend = "maturin"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
-[tool.maturin]
-bindings = "pyo3"
-module-name = "pyo3-q-stream"
+[tool.hatch.envs.default]
+dependencies = [
+    "maturin",  # Only needed for development
+    "hatch"
+]
 
 [project.urls]
 Homepage = "https://github.com/jregistr/boto-ext-qbusiness-chat-stream"

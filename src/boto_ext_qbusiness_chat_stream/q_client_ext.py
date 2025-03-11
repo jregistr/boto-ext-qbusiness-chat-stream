@@ -1,4 +1,3 @@
-import rust_extension
 
 class ThatThing:
     def __init__(self, q):
@@ -7,6 +6,3 @@ class ThatThing:
 
     def helo(self):
         print(f"world {self.q}")
-
-    def doit(selfs):
-        rust_extension.hello_from_rust()
