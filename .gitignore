@@ -9,3 +9,34 @@ venv.bak/
 
 # Editor
 .idea
+
+# Build outputs
+target
+
+# Byte-compiled / optimized / DLL files
+
+__pycache__/
+.pytest_cache/
+*.py[cod]
+
+
+# Distribution / packaging
+.Python
+.venv/
+env/
+bin/
+build/
+develop-eggs/
+dist/
+eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+include/
+man/
+venv/
+*.egg-info/
+.installed.cfg
+*.egg
