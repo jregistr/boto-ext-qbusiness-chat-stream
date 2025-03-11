@@ -4,6 +4,7 @@ version = "0.0.1"
 authors = [
     { name="Jeff Registre" },
 ]
+license = { file = "LICENSE.md" }
 description = "An extension of boto3 qbusiness client that adds chat streaming using the rust SDK with pyo3."
 readme = "README.md"
 requires-python = ">=3.8"
@@ -19,8 +20,15 @@ dependencies = [
     "boto3"
 ]
 
-[tool.setuptools]
-license-files = ["LICENSE.md"]
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.envs.default]
+dependencies = [
+    "maturin",  # Only needed for development
+    "hatch"
+]
 
 [project.urls]
 Homepage = "https://github.com/jregistr/boto-ext-qbusiness-chat-stream"
