@@ -8,7 +8,7 @@ fn sum_as_string(a: usize, b: usize) -> PyResult<String> {
 
 #[pyfunction]
 fn say_hello() -> PyResult<String> {
-    Ok("hello world".to_string())
+    Ok("hello there big world!!".to_string())
 }
 
 /// A Python module implemented in Rust.

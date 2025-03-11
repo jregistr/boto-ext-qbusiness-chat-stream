@@ -1,4 +1,4 @@
-from .q_stream_rs import say_hello
+from q_stream_rs import say_hello
 
 class ThatThing:
     def __init__(self, q):
@@ -9,4 +9,4 @@ class ThatThing:
         print(f"world {self.q}")
 
     def doit(self):
-        say_hello()
+        return say_hello()
