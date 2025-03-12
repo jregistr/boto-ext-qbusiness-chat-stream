@@ -1,5 +1,8 @@
+use async_stream::__private::AsyncStream;
+use async_stream::try_stream;
+use async_stream::stream;
 use aws_sdk_qbusiness::types::{ChatInputStream, TextInputEvent};
-use futures_util::{StreamExt, TryStreamExt};
+use futures_util::{Stream, StreamExt, TryStreamExt};
 use pyo3::prelude::*;
 use pyo3::types::PyString;
 
@@ -21,7 +24,7 @@ fn say_it_out_loud() -> PyResult<String> {
 
 #[pyclass]
 struct QBusiness {
-    // client: aws_sdk_qbusiness::Client,
+    client: aws_sdk_qbusiness::Client,
 }
 
 #[pymethods]
@@ -29,7 +32,7 @@ impl QBusiness {
     #[new]
     fn new() -> PyResult<Self> {
         // Create a Tokio runtime to load AWS configuration and create the SDK client
-        /*  let rt = tokio::runtime::Runtime::new().map_err(|e| {
+          let rt = tokio::runtime::Runtime::new().map_err(|e| {
             pyo3::exceptions::PyRuntimeError::new_err(format!(
                 "Failed to create Tokio runtime: {:?}",
                 e
@@ -39,8 +42,8 @@ impl QBusiness {
             let config = aws_config::load_from_env().await;
             aws_sdk_qbusiness::Client::new(&config)
         });
-        Ok(QBusiness { client })*/
-        Ok(QBusiness {})
+        Ok(QBusiness { client })
+        // Ok(QBusiness {})
     }
 
     /// Prepares a chat session for asynchronous chat operations.
@@ -56,7 +59,7 @@ impl QBusiness {
             account_id,
             application_id,
             user_id,
-            // client: self.client.clone(),
+            client: self.client.clone(),
         })
     }
 }
@@ -66,7 +69,7 @@ struct ChatSession {
     account_id: String,
     application_id: String,
     user_id: Option<String>,
-    // client: aws_sdk_qbusiness::Client,
+    client: aws_sdk_qbusiness::Client,
 }
 
 struct AA {}
@@ -90,12 +93,23 @@ impl ChatSession {
             })
         });
 
-        pyo3_async_runtimes::tokio::future_into_py(py, async move {
-            let collected = py_stream.try_collect::<Vec<_>>().await;
+        self.client.chat().input_stream()
 
-            println!("collected: {:?}", collected);
+        pyo3_async_runtimes::tokio::future_into_py(py, async move {
+            let chat_input_events = stream! {
+                let mut raw_parsed_fallible = py_stream;
+                while let Some(result) = raw_parsed_fallible.next().await {
+                    let event = result?;
+                    yield event;
+                }
+            };
+
+            // let collected = py_stream.try_collect::<Vec<_>>().await;
+
+            // println!("collected it all: {:?}", collected);
             Ok(())
         })
+
 
         /*    .map(|item| {
             let gil = Python::with_gil(|py| -> PyResult<i32>  {
