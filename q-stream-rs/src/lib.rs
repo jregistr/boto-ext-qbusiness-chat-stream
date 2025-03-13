@@ -1,14 +1,12 @@
+mod output;
+
 use aws_sdk_qbusiness::operation::chat::builders::ChatFluentBuilder;
-use aws_sdk_qbusiness::primitives::event_stream::EventReceiver;
-use aws_sdk_qbusiness::types::error::{ChatInputStreamError, ChatOutputStreamError};
-use aws_sdk_qbusiness::types::{
-    ChatInputStream, ChatOutputStream, EndOfInputEvent, TextInputEvent,
-};
+use aws_sdk_qbusiness::types::error::ChatInputStreamError;
+use aws_sdk_qbusiness::types::{ChatInputStream, EndOfInputEvent, TextInputEvent};
 use aws_smithy_http::event_stream::EventStreamSender;
 use futures_util::{Stream, StreamExt};
+use output::ChatOutputGenerator;
 use pyo3::prelude::*;
-use std::sync::Arc;
-use tokio::sync::Mutex;
 
 /// Formats the sum of two numbers as string.
 #[pyfunction]
@@ -73,24 +71,6 @@ struct ChatSession {
     user_id: Option<String>,
     client: aws_sdk_qbusiness::Client,
 }
-
-type ChatEventReceiver = EventReceiver<ChatOutputStream, ChatOutputStreamError>;
-
-#[pyclass]
-struct ChatOutputGenerator {
-    inner: Arc<Mutex<ChatEventReceiver>>,
-}
-
-impl ChatOutputGenerator {
-    fn new(receiver: ChatEventReceiver) -> Self {
-        Self {
-            inner: Arc::new(Mutex::new(receiver)),
-        }
-    }
-}
-
-#[pymethods]
-impl ChatOutputGenerator {}
 
 #[pymethods]
 impl ChatSession {
