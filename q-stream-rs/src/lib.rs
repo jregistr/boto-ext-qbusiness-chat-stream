@@ -1,10 +1,14 @@
-use async_stream::__private::AsyncStream;
-use async_stream::try_stream;
-use async_stream::stream;
-use aws_sdk_qbusiness::types::{ChatInputStream, TextInputEvent};
-use futures_util::{Stream, StreamExt, TryStreamExt};
+use aws_sdk_qbusiness::operation::chat::builders::ChatFluentBuilder;
+use aws_sdk_qbusiness::primitives::event_stream::EventReceiver;
+use aws_sdk_qbusiness::types::error::{ChatInputStreamError, ChatOutputStreamError};
+use aws_sdk_qbusiness::types::{
+    ChatInputStream, ChatOutputStream, EndOfInputEvent, TextInputEvent,
+};
+use aws_smithy_http::event_stream::EventStreamSender;
+use futures_util::{Stream, StreamExt};
 use pyo3::prelude::*;
-use pyo3::types::PyString;
+use std::sync::Arc;
+use tokio::sync::Mutex;
 
 /// Formats the sum of two numbers as string.
 #[pyfunction]
@@ -32,7 +36,7 @@ impl QBusiness {
     #[new]
     fn new() -> PyResult<Self> {
         // Create a Tokio runtime to load AWS configuration and create the SDK client
-          let rt = tokio::runtime::Runtime::new().map_err(|e| {
+        let rt = tokio::runtime::Runtime::new().map_err(|e| {
             pyo3::exceptions::PyRuntimeError::new_err(format!(
                 "Failed to create Tokio runtime: {:?}",
                 e
@@ -48,15 +52,14 @@ impl QBusiness {
 
     /// Prepares a chat session for asynchronous chat operations.
     /// Takes an account ID, application ID, and an optional user ID.
+    #[pyo3(signature = (application_id, user_id=None))]
     fn prepare_chat(
         &self,
-        account_id: String,
         application_id: String,
         user_id: Option<String>,
     ) -> PyResult<ChatSession> {
         // For now, just create a new ChatSession with the provided values.
         Ok(ChatSession {
-            account_id,
             application_id,
             user_id,
             client: self.client.clone(),
@@ -66,75 +69,117 @@ impl QBusiness {
 
 #[pyclass]
 struct ChatSession {
-    account_id: String,
     application_id: String,
     user_id: Option<String>,
     client: aws_sdk_qbusiness::Client,
 }
 
-struct AA {}
+type ChatEventReceiver = EventReceiver<ChatOutputStream, ChatOutputStreamError>;
+
+#[pyclass]
+struct ChatOutputGenerator {
+    inner: Arc<Mutex<ChatEventReceiver>>,
+}
+
+impl ChatOutputGenerator {
+    fn new(receiver: ChatEventReceiver) -> Self {
+        Self {
+            inner: Arc::new(Mutex::new(receiver)),
+        }
+    }
+}
+
+#[pymethods]
+impl ChatOutputGenerator {}
 
 #[pymethods]
 impl ChatSession {
     /// Outline for the send_chat method.
     /// This method will eventually accept a Python async iterable of chat input events
     /// and return an async iterable of chat output events.
-    fn send_chat<'p>(&self, py: Python<'p>, py_input: Bound<PyAny>) -> PyResult<Bound<'p, PyAny>> {
-        use async_stream::stream;
-        use futures_util::StreamExt;
+    fn send_chat<'p>(
+        &mut self,
+        py: Python<'p>,
+        input_events: Bound<PyAny>,
+    ) -> PyResult<Bound<'p, PyAny>> {
+        let input_events = stream_input_events(input_events)?;
+        let app = std::mem::replace(&mut self.application_id, String::new());
+        let user_id = self.user_id.take();
+        let client = self.client.to_owned();
 
-        // .map(|item| Python::with_gil(|py| -> PyResult<i32> { Ok(item.bind(py).extract()?) }))
-        let py_stream = pyo3_async_runtimes::tokio::into_stream_v2(py_input)?.map(|item| {
+        pyo3_async_runtimes::tokio::future_into_py(py, async move {
+            let sender = EventStreamSender::from(input_events);
+            let chat_builder = client
+                .chat()
+                .application_id(app)
+                .set_user_id(user_id)
+                .input_stream(sender);
+            let out_stream = call_and_get_stream(chat_builder).await?;
+            Ok(out_stream)
+        })
+    }
+}
+
+async fn call_and_get_stream(builder: ChatFluentBuilder) -> PyResult<ChatOutputGenerator> {
+    let chat_output = builder.send().await;
+    let chat_output = match chat_output {
+        Err(e) => {
+            return Err(pyo3::exceptions::PyRuntimeError::new_err(
+                e.into_service_error().to_string(),
+            ))
+        }
+        Ok(output) => output,
+    };
+    let stream_receiver = chat_output.output_stream;
+    Ok(ChatOutputGenerator::new(stream_receiver))
+}
+
+fn stream_input_events(
+    input_events: Bound<PyAny>,
+) -> PyResult<impl Stream<Item = Result<ChatInputStream, ChatInputStreamError>>> {
+    let stream = pyo3_async_runtimes::tokio::into_stream_v2(input_events)?
+        .map(|item| {
             Python::with_gil(|py| -> PyResult<ChatInputStream> {
                 let obj = item.bind(py);
                 let event = convert_chat_input_event(obj)?;
                 Ok(event)
-                // Ok(item.bind(py).extract()?)
             })
-        });
-
-        self.client.chat().input_stream()
-
-        pyo3_async_runtimes::tokio::future_into_py(py, async move {
-            let chat_input_events = stream! {
-                let mut raw_parsed_fallible = py_stream;
-                while let Some(result) = raw_parsed_fallible.next().await {
-                    let event = result?;
-                    yield event;
-                }
-            };
-
-            // let collected = py_stream.try_collect::<Vec<_>>().await;
-
-            // println!("collected it all: {:?}", collected);
-            Ok(())
         })
-
-
-        /*    .map(|item| {
-            let gil = Python::with_gil(|py| -> PyResult<i32>  {
-                item.bind(py).extract()?
-            });
-
-        });*/
-
-        // Ok(&*PyString::new(py, "placeholder string"))
-        // let a = "hello there, finished".to_string();
-        // Ok(a)
-        // todo!()
-        // Placeholder implementation
-        // Ok("send_chat not implemented yet".to_string())
-    }
+        .map(|input| match input {
+            Ok(event) => Ok(event),
+            Err(err) => Err(ChatInputStreamError::unhandled(err)),
+        });
+    Ok(stream)
 }
 
-fn convert_chat_input_event(raw_input_event: &Bound<PyAny>) -> PyResult<ChatInputStream> {
-    println!("raw input event: {:?}", raw_input_event);
-    Ok(ChatInputStream::TextEvent(
-        TextInputEvent::builder()
-            .user_message("hello")
-            .build()
-            .unwrap(),
-    ))
+fn convert_chat_input_event(raw: &Bound<PyAny>) -> PyResult<ChatInputStream> {
+    let type_str: String = raw.get_item("type")?.extract()?;
+
+    // Is there a better way to do this?
+    let event = match type_str.as_str() {
+        "text" => {
+            let user_message: String = raw.get_item("user_message")?.extract()?;
+            let text_event = TextInputEvent::builder()
+                .user_message(user_message)
+                .build()
+                .map_err(|e| {
+                    pyo3::exceptions::PyValueError::new_err(format!(
+                        "Failed to build TextInputEvent: {:?}",
+                        e
+                    ))
+                })?;
+            ChatInputStream::TextEvent(text_event)
+        }
+        "end" => ChatInputStream::EndOfInputEvent(EndOfInputEvent::builder().build()),
+        _ => {
+            return Err(pyo3::exceptions::PyValueError::new_err(format!(
+                "Unknown input type: {}",
+                type_str
+            )));
+        }
+    };
+
+    Ok(event)
 }
 
 /// A Python module implemented in Rust.
